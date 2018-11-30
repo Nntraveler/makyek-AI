@@ -49,15 +49,6 @@ int me_flag;
 int other_flag;
 
 const int DIR[8][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1} };
-const int clockDir[8][2] = { {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1} };
-//从向上的方向顺时针到向左上的方向
-const int sunShapeDir[8][2] = 
-{ 
-	{-1,-2}, {-2,-1},
-  {-2,1}, {-1,2}, 
-  {1,2}, {2,1}, 
-  {2,-1}, {1,-2} 
-};
 
 void debug(const char *str) {
 	printf("DEBUG %s\n", str);
@@ -101,48 +92,22 @@ BOOL isInBound(int x, int y) {
 	*/
 char myBoard[7][12][12] = { 0 }; // 剪枝使用的棋盘
 int step = 0;
-int lowTotalMoves = 0;
 struct Command tmpCommand = { 0,0,0 };
 struct Command bestCommand = { 0,0,0 };
 const int* priorDir[8] = { 0 };
-struct Command legalMoves[MAXDEPTH+1][128] = { 0 };
-BOOL gameOver = FALSE;
 /**
  * 你可以在这里初始化你的AI
  */
 void initAI(int mycolor) {
 
 }
-int generateLegalMoves(int depth, int myColor) {
-	const int* delta = NULL;
-	int count = 0;
-	for (int x = 0; x < BOARD_SIZE; x++) {  //寻找可行着法
-		for (int y = 0; y < BOARD_SIZE; y++) {
-			if (myBoard[depth][x][y] != myColor) continue;
-			for (int k = 0; k < 8; k++) {
-				delta = DIR[k];
-				int new_x = x + delta[0];
-				int new_y = y + delta[1];
-				if (isInBound(new_x, new_y) && myBoard[depth][new_x][new_y] == EMPTY)
-				{
-					legalMoves[depth][count].x = x;
-					legalMoves[depth][count].y = y;
-					legalMoves[depth][count].option = k;
-					count++;
-				}
-			}
-		}
-	}
-	if (count == 0) gameOver = TRUE;
-	return count;
-}
 
-BOOL makeNextMove(int myColor, int count, int depth) {
-	int new_x = legalMoves[depth][count].x + DIR[legalMoves[depth][count].option][0];
-	int new_y = legalMoves[depth][count].y + DIR[legalMoves[depth][count].option][1];
-	myBoard[depth][legalMoves[depth][count].x][legalMoves[depth][count].y] = EMPTY;
-	myBoard[depth][new_x][new_y] = myColor;
-	int other_color = 3 - myColor;
+BOOL MakeNextMove(int mycolor, int depth) { //改变棋盘
+	int new_x = tmpCommand.x + DIR[tmpCommand.option][0];
+	int new_y = tmpCommand.y + DIR[tmpCommand.option][1];
+	myBoard[depth][tmpCommand.x][tmpCommand.y] = EMPTY;
+	myBoard[depth][new_x][new_y] = mycolor;
+	int other_color = 3 - mycolor;
 
 	// 挑
 	int intervention_dir[4][2] = { {1, 0}, {0, 1}, {1, 1}, {1, -1} };
@@ -153,8 +118,8 @@ BOOL makeNextMove(int myColor, int count, int depth) {
 		int y2 = new_y - intervention_dir[i][1];
 		if (isInBound(x1, y1) && isInBound(x2, y2) && myBoard[depth][x1][y1] == other_color && myBoard[depth][x2][y2] == other_color)
 		{
-			myBoard[depth][x1][y1] = myColor;
-			myBoard[depth][x2][y2] = myColor;
+			myBoard[depth][x1][y1] = mycolor;
+			myBoard[depth][x2][y2] = mycolor;
 		}
 	}
 
@@ -165,16 +130,20 @@ BOOL makeNextMove(int myColor, int count, int depth) {
 		int y1 = new_y + custodian_dir[i][1];
 		int x2 = new_x + custodian_dir[i][0] * 2;
 		int y2 = new_y + custodian_dir[i][1] * 2;
-		if (isInBound(x1, y1) && isInBound(x2, y2) && myBoard[depth][x2][y2] == myColor && myBoard[depth][x1][y1] == other_color)
+		if (isInBound(x1, y1) && isInBound(x2, y2) && myBoard[depth][x2][y2] == mycolor && myBoard[depth][x1][y1] == other_color)
 		{
-			myBoard[depth][x1][y1] = myColor;
+			myBoard[depth][x1][y1] = mycolor;
 		}
 	}
 	return TRUE;
 }
 
 BOOL chessboard_offset(int depth) {
-	memcpy(myBoard[depth], myBoard[depth + 1], sizeof(myBoard[depth]));
+	for (int x = 0; x < BOARD_SIZE; x++) {
+		for (int y = 0; y < BOARD_SIZE; y++) {
+			myBoard[depth][x][y] = myBoard[depth + 1][x][y];
+		}
+	}
 	return TRUE;
 }
 
@@ -195,7 +164,6 @@ int Evaluate(int depth, int mycolor) {
 	int value = 0;
 	int other_color = 3 - mycolor;
 	const int* delta = NULL;
-	const int* sunShapeDelta = NULL;
 	if (tmpCommand.option > 3) value += 1;//优先斜走
 	for (int x = 0; x < BOARD_SIZE; x++) {
 		for (int y = 0; y < BOARD_SIZE; y++) {
@@ -203,22 +171,22 @@ int Evaluate(int depth, int mycolor) {
 				if (myBoard[depth][x][y] == mycolor) {
 					value += 100000;
 					if (mycolor == 1) {//黑棋集中到5,7
-						value += (81 - (x - 5)*(x - 5) - (y - 7)*(y - 7)) * 25;
+						value += (13 - abs(x - 5) - abs(y - 7))*5;
 					}
 					else {//白棋集中到6,4
-						value += (81 - (x - 6)*(x - 6) - (y - 4)*(y - 4)) * 25;
+						value += (13 - abs(x - 6) - abs(y - 4))*5;
 					}
-					for (int k = 0; k < 4; k++) {
-						delta = clockDir[k];
-						sunShapeDelta = sunShapeDir[k];
+					for (int k = 0; k < 8; k++) {
+						delta = DIR[k];
 						//.X.
 						//..X
 						//X.. 形状
-						int sunShape_x = x + sunShapeDelta[0];
-						int sunShape_y = y + sunShapeDelta[1];
-						if (isInBound(sunShape_x, sunShape_y) && myBoard[depth][sunShape_x][sunShape_y] == mycolor)
-						{
-							value += 300;
+						int sunShape_x[2] = { x + 2 * delta[0],x + delta[0] };
+						int sunShape_y[2] = { y + delta[1],y + 2 * delta[2] };
+						for (int i = 0; i < 2; i++) {
+							if (isInBound(sunShape_x[i], sunShape_y[i]) && myBoard[depth][sunShape_x[i]][sunShape_y[i]] == mycolor) {
+								value += 100;
+							}
 						}
 						int near_x = x + delta[0];
 						int near_y = y + delta[1];
@@ -235,7 +203,6 @@ int Evaluate(int depth, int mycolor) {
 									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color)
 									{
 										value -= 160000;
-										break;
 									}
 								}
 							}
@@ -249,177 +216,61 @@ int Evaluate(int depth, int mycolor) {
 									int Enm_Pos_y = sym_near_y + delta[1];
 									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color) {
 										value -= 80000;
-										break;
 									}
 								}
 							}
 						}
 					}
 				}
-				else {
-					value -= 100000;
-					for (int k = 0; k < 4; k++) {
-						delta = clockDir[k];
-						int near_x = x + delta[0];
-						int near_y = y + delta[1];
-						if (isInBound(near_x, near_y) && myBoard[depth][near_x][near_y] == EMPTY)
-						{
-							//判断有无可能被挑
-							if (isInBound(near_x + delta[0], near_y + delta[1]) && myBoard[depth][near_x + delta[0]][near_y + delta[1]] == other_color)
-							{
-								const int* delta2 = NULL;
-								for (int i = 0; i < 8; i++) {
-									delta2 = DIR[i];
-									int Enm_Pos_x = near_x + delta2[0];
-									int Enm_Pos_y = near_y + delta2[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == mycolor)
-									{
-										value += 160000;
-										break;
-									}
-								}
-							}
-						}
-						else if (myBoard[depth][near_x][near_y] == mycolor) { //判断有无可能被夹
-							int sym_near_x = x - delta[0];
-							int sym_near_y = y - delta[1];
-							if (isInBound(sym_near_x, sym_near_y) && myBoard[depth][sym_near_x][sym_near_y] == EMPTY) {
-								for (int i = 0; i < 8; i++) {
-									int Enm_Pos_x = sym_near_x + delta[0];
-									int Enm_Pos_y = sym_near_y + delta[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == mycolor) {
-										value += 80000;
-										break;
-									}
-								}
-							}
-						}
-					}
-				}
+				else value -= 100000;
 			}
 		}
 	}
 	return value;
 }
 
-int lowEvaluate(int myColor) {
-	int lowVal = 0;
-	int other_color = 3 - myColor;
+int AlphaBeta(int depth, int alpha, int beta, int mycolor) {
+	chessboard_offset(depth); //调整棋盘
+	if (depth == 0) return Evaluate(depth, mycolor);
 	const int* delta = NULL;
-	for (int x = 0; x < BOARD_SIZE; x++) {
+	for (int x = 0; x < BOARD_SIZE; x++) {  //寻找可行着法
 		for (int y = 0; y < BOARD_SIZE; y++) {
-			if (myBoard[MAXDEPTH][x][y] == EMPTY) continue;
-			if (myBoard[MAXDEPTH][x][y] == myColor) {
-				lowVal += 100000;
-				for (int k = 0; k < 4; k++) {
-					delta = clockDir[k];
-					int near_x = x + delta[0];
-					int near_y = y + delta[1];
-					if (isInBound(near_x, near_y) && myBoard[MAXDEPTH][near_x][near_y] == EMPTY)
-					{
-						//判断有无可能被挑
-						if (isInBound(near_x + delta[0], near_y + delta[1]) && myBoard[MAXDEPTH][near_x + delta[0]][near_y + delta[1]] == MAXDEPTH)
-						{
-							const int* delta2 = NULL;
-							for (int i = 0; i < 8; i++) {
-								delta2 = DIR[i];
-								int Enm_Pos_x = near_x + delta2[0];
-								int Enm_Pos_y = near_y + delta2[1];
-								if (myBoard[MAXDEPTH][Enm_Pos_x][Enm_Pos_y] == other_color)
-								{
-									lowVal -= 60000;
-									break;
-								}
-							}
-						}
+			if (myBoard[depth][x][y] != mycolor) continue;
+			for (int k = 0; k < 8; k++) {
+				int val = 0;
+				delta = DIR[k];
+				int new_x = x + delta[0];
+				int new_y = y + delta[1];
+				if (isInBound(new_x, new_y) && myBoard[depth][new_x][new_y] == EMPTY)
+				{
+					struct Command possibleBestCommand = { 0,0,0 };
+					tmpCommand.x = x;
+					tmpCommand.y = y;
+					tmpCommand.option = k;
+					if (depth == MAXDEPTH) {
+						possibleBestCommand.x = x;
+						possibleBestCommand.y = y;
+						possibleBestCommand.option = k;
 					}
-
-					else if (myBoard[MAXDEPTH][near_x][near_y] == other_color) { //判断有无可能被夹
-						int sym_near_x = x - delta[0];
-						int sym_near_y = y - delta[1];
-						if (isInBound(sym_near_x, sym_near_y) && myBoard[MAXDEPTH][sym_near_x][sym_near_y] == EMPTY) {
-							for (int i = 0; i < 8; i++) {
-								int Enm_Pos_x = sym_near_x + delta[0];
-								int Enm_Pos_y = sym_near_y + delta[1];
-								if (myBoard[MAXDEPTH][Enm_Pos_x][Enm_Pos_y] == other_color) {
-									lowVal -= 40000;
-									break;
-								}
-							}
+					MakeNextMove(mycolor, depth);  //操作棋盘
+					val = -AlphaBeta(depth - 1, -beta, -alpha, 3 - mycolor); //递归调用 进入下一层，将beta,alpha置为负，转换执棋方
+					chessboard_offset(depth); //重新调整棋盘
+					if (val >= beta) {
+						return beta;
+					}
+					if (val > alpha) {
+						alpha = val;
+						if (depth == MAXDEPTH) {
+							bestCommand.x = possibleBestCommand.x;
+							bestCommand.y = possibleBestCommand.y;
+							bestCommand.option = possibleBestCommand.option;
 						}
 					}
 				}
 			}
-			else {
-				lowVal -= 100000;
-			}
 		}
 	}
-	return lowVal;
-}
-
-BOOL lowCommandSort(int myColor) {
-	lowTotalMoves = 0;
-	int tmp = 0;
-	int commandVal[128] = { -INFINITY_VALUE };
-	struct Command swapTmpCommand = { 0,0,0 };
-	chessboard_offset(MAXDEPTH);
-	lowTotalMoves = generateLegalMoves(MAXDEPTH, myColor);
-	for (int i = 0; i < lowTotalMoves; i++) {
-		makeNextMove(myColor, i, MAXDEPTH);
-		commandVal[i] = lowEvaluate(myColor);
-		chessboard_offset(MAXDEPTH);
-	}
-	for (int i = 0; i < lowTotalMoves - 1; i++) {
-		for (int j = 0; j < lowTotalMoves - 1; j++) {
-			if (commandVal[j] < commandVal[j + 1]) {
-				tmp = commandVal[j];
-				commandVal[j] = commandVal[j + 1];
-				commandVal[j + 1] = tmp;
-				swapTmpCommand = legalMoves[MAXDEPTH][j];
-				legalMoves[MAXDEPTH][j] = legalMoves[MAXDEPTH][j + 1];
-				legalMoves[MAXDEPTH][j + 1] = swapTmpCommand;
-			}
-		}
-	}
-	return TRUE;
-}
-
-int AlphaBeta(int depth, int alpha, int beta, int mycolor) {
-	if (depth == 0) return Evaluate(depth + 1, mycolor);
-	const int* delta = NULL;
-	int totalMoves = 0;
-	chessboard_offset(depth); //调整棋盘
-	if (depth != MAXDEPTH) {
-		totalMoves = generateLegalMoves(depth, mycolor);
-		if (totalMoves == 0) {
-			return Evaluate(depth, mycolor);
-		}
-	}
-	else {
-		totalMoves = lowTotalMoves;
-	}
-	for (int i = 0; i < totalMoves; i++) {  //寻找可行着法
-		int val = 0;
-		struct Command possibleBestCommand = { 0,0,0 };
-		tmpCommand = legalMoves[depth][i];
-		if (depth == MAXDEPTH) {
-			possibleBestCommand = tmpCommand;
-		}
-		makeNextMove(mycolor, i, depth);  //操作棋盘
-		val = -AlphaBeta(depth - 1, -beta, -alpha, 3 - mycolor); //递归调用 进入下一层，将beta,alpha置为负，转换执棋方
-		chessboard_offset(depth); //重新调整棋盘
-		if (val >= beta) {
-			return beta;
-		}
-		if (val > alpha) {
-			alpha = val;
-			if (depth == MAXDEPTH) {
-				bestCommand = possibleBestCommand;
-			}
-		}
-	}
-		return alpha;
+	return alpha;
 }
 /**
  * 轮到你落子。
@@ -431,7 +282,7 @@ BOOL aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int mycolor) {
 	if (step == 0) {
 		bestCommand.x = 9;
 		bestCommand.y = 7;
-		bestCommand.option = 4;
+		bestCommand.option = 0;
 		return TRUE;
 	}
 	if (step == 1) {
@@ -440,8 +291,11 @@ BOOL aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int mycolor) {
 		bestCommand.option = 6;
 		return TRUE;
 	}
-	memcpy(myBoard[MAXDEPTH + 1], board, sizeof(myBoard[MAXDEPTH + 1])); //初始化剪枝用的棋盘
-	lowCommandSort(mycolor);
+	for (int i = 0; i < BOARD_SIZE; i++) { //初始化剪枝用的棋盘
+		for (int j = 0; j < BOARD_SIZE; j++) {
+			myBoard[MAXDEPTH + 1][i][j] = board[i][j];
+		}
+	}
 	AlphaBeta(MAXDEPTH, -INFINITY_VALUE, INFINITY_VALUE, mycolor);
 	return TRUE;
 }
@@ -577,7 +431,7 @@ int main(int argc, char *argv[]) {
 			sscanf(buffer, "%s %d", tmp, &x);
 			end(x);
 		}
-		printBoard();
+		//printBoard();
 	}
 	return 0;
 }

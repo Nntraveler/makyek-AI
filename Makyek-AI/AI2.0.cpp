@@ -49,10 +49,7 @@ int me_flag;
 int other_flag;
 
 const int DIR[8][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1} };
-const int clockDir[8][2] = { {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1} };
-//从向上的方向顺时针到向左上的方向
-const int sunShapeDir[8][2] = 
-{ 
+const int sunShapeDir[8][2] = { 
 	{-1,-2}, {-2,-1},
   {-2,1}, {-1,2}, 
   {1,2}, {2,1}, 
@@ -106,7 +103,6 @@ struct Command tmpCommand = { 0,0,0 };
 struct Command bestCommand = { 0,0,0 };
 const int* priorDir[8] = { 0 };
 struct Command legalMoves[MAXDEPTH+1][128] = { 0 };
-BOOL gameOver = FALSE;
 /**
  * 你可以在这里初始化你的AI
  */
@@ -133,7 +129,6 @@ int generateLegalMoves(int depth, int myColor) {
 			}
 		}
 	}
-	if (count == 0) gameOver = TRUE;
 	return count;
 }
 
@@ -203,13 +198,13 @@ int Evaluate(int depth, int mycolor) {
 				if (myBoard[depth][x][y] == mycolor) {
 					value += 100000;
 					if (mycolor == 1) {//黑棋集中到5,7
-						value += (81 - (x - 5)*(x - 5) - (y - 7)*(y - 7)) * 25;
+						value += (13 - abs(x - 5) - abs(y - 7)) * 200;
 					}
 					else {//白棋集中到6,4
-						value += (81 - (x - 6)*(x - 6) - (y - 4)*(y - 4)) * 25;
+						value += (13 - abs(x - 6) - abs(y - 4)) * 200;
 					}
-					for (int k = 0; k < 4; k++) {
-						delta = clockDir[k];
+					for (int k = 0; k < 8; k++) {
+						delta = DIR[k];
 						sunShapeDelta = sunShapeDir[k];
 						//.X.
 						//..X
@@ -218,84 +213,43 @@ int Evaluate(int depth, int mycolor) {
 						int sunShape_y = y + sunShapeDelta[1];
 						if (isInBound(sunShape_x, sunShape_y) && myBoard[depth][sunShape_x][sunShape_y] == mycolor)
 						{
-							value += 300;
+							value += 100;
 						}
-						int near_x = x + delta[0];
-						int near_y = y + delta[1];
-						if (isInBound(near_x, near_y) && myBoard[depth][near_x][near_y] == EMPTY)
+					}
+					int near_x = x + delta[0];
+					int near_y = y + delta[1];
+					if (isInBound(near_x, near_y) && myBoard[depth][near_x][near_y] == EMPTY)
+					{
+						//判断有无可能被挑
+						if (isInBound(near_x + delta[0], near_y + delta[1]) && myBoard[depth][near_x + delta[0]][near_y + delta[1]] == mycolor)
 						{
-							//判断有无可能被挑
-							if (isInBound(near_x + delta[0], near_y + delta[1]) && myBoard[depth][near_x + delta[0]][near_y + delta[1]] == mycolor)
-							{
-								const int* delta2 = NULL;
-								for (int i = 0; i < 8; i++) {
-									delta2 = DIR[i];
-									int Enm_Pos_x = near_x + delta2[0];
-									int Enm_Pos_y = near_y + delta2[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color)
-									{
-										value -= 160000;
-										break;
-									}
+							const int* delta2 = NULL;
+							for (int i = 0; i < 8; i++) {
+								delta2 = DIR[i];
+								int Enm_Pos_x = near_x + delta2[0];
+								int Enm_Pos_y = near_y + delta2[1];
+								if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color)
+								{
+									value -= 160000;
 								}
 							}
 						}
-						else if (myBoard[depth][near_x][near_y] == other_color) { //判断有无可能被夹
-							int sym_near_x = x - delta[0];
-							int sym_near_y = y - delta[1];
-							if (isInBound(sym_near_x, sym_near_y) && myBoard[depth][sym_near_x][sym_near_y] == EMPTY) {
-								for (int i = 0; i < 8; i++) {
-									int Enm_Pos_x = sym_near_x + delta[0];
-									int Enm_Pos_y = sym_near_y + delta[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color) {
-										value -= 80000;
-										break;
-									}
+					}
+					else if (myBoard[depth][near_x][near_y] == other_color) { //判断有无可能被夹
+						int sym_near_x = x - delta[0];
+						int sym_near_y = y - delta[1];
+						if (isInBound(sym_near_x, sym_near_y) && myBoard[depth][sym_near_x][sym_near_y] == EMPTY) {
+							for (int i = 0; i < 8; i++) {
+								int Enm_Pos_x = sym_near_x + delta[0];
+								int Enm_Pos_y = sym_near_y + delta[1];
+								if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == other_color) {
+									value -= 80000;
 								}
 							}
 						}
 					}
 				}
-				else {
-					value -= 100000;
-					for (int k = 0; k < 4; k++) {
-						delta = clockDir[k];
-						int near_x = x + delta[0];
-						int near_y = y + delta[1];
-						if (isInBound(near_x, near_y) && myBoard[depth][near_x][near_y] == EMPTY)
-						{
-							//判断有无可能被挑
-							if (isInBound(near_x + delta[0], near_y + delta[1]) && myBoard[depth][near_x + delta[0]][near_y + delta[1]] == other_color)
-							{
-								const int* delta2 = NULL;
-								for (int i = 0; i < 8; i++) {
-									delta2 = DIR[i];
-									int Enm_Pos_x = near_x + delta2[0];
-									int Enm_Pos_y = near_y + delta2[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == mycolor)
-									{
-										value += 160000;
-										break;
-									}
-								}
-							}
-						}
-						else if (myBoard[depth][near_x][near_y] == mycolor) { //判断有无可能被夹
-							int sym_near_x = x - delta[0];
-							int sym_near_y = y - delta[1];
-							if (isInBound(sym_near_x, sym_near_y) && myBoard[depth][sym_near_x][sym_near_y] == EMPTY) {
-								for (int i = 0; i < 8; i++) {
-									int Enm_Pos_x = sym_near_x + delta[0];
-									int Enm_Pos_y = sym_near_y + delta[1];
-									if (myBoard[depth][Enm_Pos_x][Enm_Pos_y] == mycolor) {
-										value += 80000;
-										break;
-									}
-								}
-							}
-						}
-					}
-				}
+				else value -= 100000;
 			}
 		}
 	}
@@ -311,8 +265,8 @@ int lowEvaluate(int myColor) {
 			if (myBoard[MAXDEPTH][x][y] == EMPTY) continue;
 			if (myBoard[MAXDEPTH][x][y] == myColor) {
 				lowVal += 100000;
-				for (int k = 0; k < 4; k++) {
-					delta = clockDir[k];
+				for (int k = 0; k < 8; k++) {
+					delta = DIR[k];
 					int near_x = x + delta[0];
 					int near_y = y + delta[1];
 					if (isInBound(near_x, near_y) && myBoard[MAXDEPTH][near_x][near_y] == EMPTY)
@@ -327,7 +281,7 @@ int lowEvaluate(int myColor) {
 								int Enm_Pos_y = near_y + delta2[1];
 								if (myBoard[MAXDEPTH][Enm_Pos_x][Enm_Pos_y] == other_color)
 								{
-									lowVal -= 60000;
+									lowVal -= 80000;
 									break;
 								}
 							}
@@ -392,9 +346,6 @@ int AlphaBeta(int depth, int alpha, int beta, int mycolor) {
 	chessboard_offset(depth); //调整棋盘
 	if (depth != MAXDEPTH) {
 		totalMoves = generateLegalMoves(depth, mycolor);
-		if (totalMoves == 0) {
-			return Evaluate(depth, mycolor);
-		}
 	}
 	else {
 		totalMoves = lowTotalMoves;
